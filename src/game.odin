@@ -1,17 +1,21 @@
 //!/usr/bin/env odin build game.odin -file
-
-/*
- * game.odin 0.1.0
+/* game.odin 0.1.2
  * Beta version of a simple 2d game
-===========================================================
+====================================================
+
 Label statements:
-    //@CLEARLINES    /*To clear the lines and the columns full.*/
+    //@CLEARLINES    /*To clear the lines
+                        and the columns full.*/
     //@COLLISIONCHECK/**/
-===========================================================
-TODO: Publish onto github
-######################## TODO: Preview#####################
-######################## TODO: Colors #####################
-######################## TODO: Pieces #####################
+
+======================= TASKS =======================
+TODO:
+======================= -DONE =======================
+################# TODO: Add states ##################
+################# TODO: Publish onto github #########
+################# TODO: Preview #####################
+################# TODO: Colors ######################
+################# TODO: Pieces ######################
 */
 
 
@@ -35,12 +39,6 @@ Colors :: struct {
     Empty, Full, Fading: rl.Color 
 }
 
-SQUARE_SIZE :: 30
-SCREEN_WIDTH :: 400
-SCREEN_HEIGHT :: 500
-
-GRID_HORZSIZE :: 10
-GRID_VERTSIZE :: 10
 
 State :: struct {
     game_over: bool,
@@ -57,48 +55,65 @@ State :: struct {
 
 
     mouse_position : rl.Vector2,
-    color_configuration: Colors
 }
 
-pieces: [][][]Grid_Square = {
-    {{.Block,.Block,.Block},{.Block,.Block,.Block}},
-    {{.Block,.Block},{.Block,.Block}},
-    {{.Block,.Block,.Block},{.Empty,.Block}},
-    {{.Empty,.Block},{.Block,.Block,.Block}},
-    {{.Block},{.Block,.Block},{.Block}},
-    {{.Empty,.Block},{.Block}},
-    {{.Empty,.Block},{.Block}}
-};
+GRID_HORZSIZE :: 10
+GRID_VERTSIZE :: 10
 
-
+/* basic Configuration */
+Configuration :: struct {
+    SQUARE_SIZE: i32,
+    SCREEN_WIDTH: i32,
+    SCREEN_HEIGHT: i32,
+    color_configuration: Colors,
+    pieces: [][][]Grid_Square
+}
 
 
 main :: proc() {
     //initialization
-
-    rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Test")
+    rl.InitWindow(400,500, "Game")
     defer rl.CloseWindow()
 
     state: State
+    config: Configuration
 
-    init_game(&state)
-    fmt.printf("color_buffer = %v\n",state.colors_buffer);
+    init_game(&state,&config)
+
+
+    //fmt.printf("color_buffer = %v\n",state.colors_buffer);
     //main loop
+    fmt.printf("---- printing configuration -----\n");
+    
+    config.pieces = {
+        {{.Block,.Block,.Block},{.Block,.Block,.Block}},
+        {{.Block,.Block},{.Block,.Block}},
+        {{.Block,.Block,.Block},{.Empty,.Block}},
+        {{.Empty,.Block},{.Block,.Block,.Block}},
+        {{.Block},{.Block,.Block},{.Block}},
+        {{.Empty,.Block},{.Block}},
+        {{.Empty,.Block},{.Block}}
+    };
+    fmt.printf("configuration: %v, %v, %v\n",
+        []i32{config.SQUARE_SIZE,
+            config.SCREEN_WIDTH,
+            config.SCREEN_HEIGHT},
+        config.color_configuration,
+        config.pieces)
+    fmt.printf("---- done printing -----\n");
     rl.SetTargetFPS(60) 
     for !rl.WindowShouldClose(){
-        update_game(&state)
-        draw_game(&state)
+        update_game(&state,&config)
+        draw_game(&state,&config)
     }
 }
 
-init_game :: proc(state: ^State) {
-
+init_game :: proc(state: ^State, config: ^Configuration) {
+    /*Note: this only takes care of a few things, 
+      you have to configure your pieces yourself*/
     state^.to_delete = false
-    state^.color_configuration = Colors {
-        Empty=rl.BLACK,
-        Full=rl.GRAY,
-        Fading = rl.RED
-    }
+
+    
     palette := []rl.Color {
         rl.YELLOW,
         rl.RED,
@@ -109,19 +124,20 @@ init_game :: proc(state: ^State) {
     }
 
     state^.pieces_buffer = {
-        rand.choice(pieces),
-        rand.choice(pieces),
-        rand.choice(pieces)
+        rand.choice(config^.pieces),
+        rand.choice(config^.pieces),
+        rand.choice(config^.pieces)
     }
     state^.colors_buffer = {
-        rand.choice(palette),
-        rand.choice(palette),
-        rand.choice(palette)
+        rand.choice(state^.palette),
+        rand.choice(state^.palette),
+        rand.choice(state^.palette)
     }
     state^.palette = palette
     state^.preview_activated = true;
 
-    fmt.printf("vect:%v\n",state^.palette);
+    fmt.printf("palette:%v\n",state^.palette)
+    fmt.printf("preview_activated:%d\n",state^.preview_activated)
     state^.grid = {}
 
     for j in 0..<GRID_VERTSIZE {
@@ -135,11 +151,26 @@ init_game :: proc(state: ^State) {
             }
         }
     }
+
+    config^.SQUARE_SIZE = 30
+    config^.SCREEN_WIDTH = 400
+    config^.SCREEN_HEIGHT = 500
+
+
+    config^.color_configuration = Colors {
+        Empty=rl.BLACK,
+        Full=rl.GRAY,
+        Fading = rl.RED
+    }
+
+    
+
 }
 
-update_game :: proc(state: ^State){
+
+update_game :: proc(state: ^State, config: ^Configuration){
     if state^.game_over && rl.IsKeyPressed(.ENTER){
-        init_game(state)
+        init_game(state,config)
         state^.game_over = false
         return
     } else if rl.IsKeyPressed(.P) {
@@ -173,6 +204,21 @@ update_game :: proc(state: ^State){
         state^.to_delete = false
     }
 }
+/*check_gameover :: proc(state: State) -> bool{
+    if(state.game_over){
+        return true
+    }
+
+    current := state.pieces_buffer[1]
+    for i in 1..<GRID_HORZSIZE-1-len(current) {
+        for j in 1..<GRID_VERTSIZE - 1 {
+            if(!check_collision(state, current, i, j)){
+                return false
+            }
+        }
+    }
+    return true
+}*/
 
 check_collision :: proc(state: State, piece: [][]Grid_Square, i: int, j: int) -> bool{ //@COLLISIONCHECK
     collision: bool = false
@@ -180,7 +226,8 @@ check_collision :: proc(state: State, piece: [][]Grid_Square, i: int, j: int) ->
     b:int = 0
 
 
-collision_loop: for array in piece {
+collision_loop:\
+    for array in piece {
         for block in array {
             if block == .Block && (state.grid[i+b][j+a] == .Block || state.grid[i+b][j+a] == .Full){
                 fmt.printf("check_collision: collision found at: (a,b,i,j,grid_at)=%v,%s.\n",
@@ -234,12 +281,12 @@ blocks_to_clear :: proc(grid: [GRID_HORZSIZE][GRID_VERTSIZE + 1]Grid_Square) -> 
     return lines, cols
 }
 
-draw_game :: proc(state: ^State)->bool{
+draw_game :: proc(state: ^State, config: ^Configuration)->bool{
     rl.BeginDrawing()
     defer rl.EndDrawing()
 
-    pieces_to_draw := &state.pieces_buffer;
-    colors_to_draw := &state.colors_buffer;
+    //pieces_to_draw := &(state^.pieces_buffer);
+    //colors_to_draw := &(state^.colors_buffer);
 
     previous := state^.pieces_buffer[0]
     current := state^.pieces_buffer[1]
@@ -264,8 +311,8 @@ draw_game :: proc(state: ^State)->bool{
     }
 
     offset := [2]i32 {
-        SCREEN_WIDTH/2 - (GRID_HORZSIZE*SQUARE_SIZE/2) ,
-        SCREEN_HEIGHT/2 - (GRID_HORZSIZE*SQUARE_SIZE/2),
+        config^.SCREEN_WIDTH/2 - (GRID_HORZSIZE*config^.SQUARE_SIZE/2) ,
+        config^.SCREEN_HEIGHT/2 - (GRID_HORZSIZE*config^.SQUARE_SIZE/2),
     }
     offset2 := [2]i32{}
 
@@ -275,27 +322,27 @@ draw_game :: proc(state: ^State)->bool{
         for i in 0..<GRID_HORZSIZE {
             #partial switch(state^.grid[i][j]){ //#partial switch
                 case .Empty:
-                    rl.DrawLine(offset.x, offset.y, offset.x + SQUARE_SIZE, offset.y, state^.color_configuration.Empty)
-                    rl.DrawLine(offset.x, offset.y, offset.x, offset.y + SQUARE_SIZE, state^.color_configuration.Empty)
-                    rl.DrawLine(offset.x + SQUARE_SIZE, offset.y, offset.x + SQUARE_SIZE,offset.y, state^.color_configuration.Empty)
-                    rl.DrawLine(offset.x, offset.y, offset.x + SQUARE_SIZE, offset.y, state^.color_configuration.Empty)
+                    rl.DrawLine(offset.x, offset.y, offset.x + config^.SQUARE_SIZE, offset.y, config^.color_configuration.Empty)
+                    rl.DrawLine(offset.x, offset.y, offset.x, offset.y + config^.SQUARE_SIZE, config^.color_configuration.Empty)
+                    rl.DrawLine(offset.x + config^.SQUARE_SIZE, offset.y, offset.x + config^.SQUARE_SIZE,offset.y, config^.color_configuration.Empty)
+                    rl.DrawLine(offset.x, offset.y, offset.x + config^.SQUARE_SIZE, offset.y, config^.color_configuration.Empty)
                 case .Full:
-                    rl.DrawRectangle(offset.x,offset.y, SQUARE_SIZE, SQUARE_SIZE, state^.color_configuration.Full)
+                    rl.DrawRectangle(offset.x,offset.y, config^.SQUARE_SIZE, config^.SQUARE_SIZE, config^.color_configuration.Full)
                 case .Block:
-                    rl.DrawRectangle(offset.x,offset.y, SQUARE_SIZE, SQUARE_SIZE, state^.colors[i][j])
+                    rl.DrawRectangle(offset.x,offset.y, config^.SQUARE_SIZE, config^.SQUARE_SIZE, state^.colors[i][j])
                 case:
                     fmt.printf("Error: block type not recognized.")
             }
             /* a part of the update, but for optimization this will stay here */
             if !state^.pause && f32(offset.x) < state^.mouse_position.x \
-                 && state^.mouse_position.x < f32(offset.x) + SQUARE_SIZE{
+                 && state^.mouse_position.x < f32(i32(offset.x) + config^.SQUARE_SIZE){
                 if f32(offset.y) < state^.mouse_position.y &&\
-                     state^.mouse_position.y < f32(offset.y) + SQUARE_SIZE\
+                     state^.mouse_position.y < f32(i32(offset.y) + config^.SQUARE_SIZE)\
                      && rl.IsMouseButtonPressed(.LEFT){
                     //fmt.printf("selected color: %v\n" ,current_color)
 
                     if(check_collision(state^, current, i, j)){ //@COLLISIONCHECK
-                        offset.x += SQUARE_SIZE
+                        offset.x += config^.SQUARE_SIZE
                         break
                     }
 
@@ -316,30 +363,30 @@ draw_game :: proc(state: ^State)->bool{
                     state^.to_delete = true;
 
                     //fmt.printf("lines,cols: %v,%v\n",lines,cols)
-                    //fmt.printf("current:(%v)->%v->%v\n",previous,current,next)
-                    pieces_to_draw^[0] = current
-                    pieces_to_draw^[1] = next
-                    pieces_to_draw^[2] = rand.choice(pieces)
+                    fmt.printf("current:(%v)->%v->%v\n",previous,current,next)
+                    state^.pieces_buffer[0] = current
+                    state^.pieces_buffer[1] = next
+                    state^.pieces_buffer[2] = rand.choice(config^.pieces)
 
                     fmt.printf("state^.colors:(%d)->%d->%d\n",previous_color,current_color,next_color)
-                    colors_to_draw^[0] = current_color
-                    colors_to_draw^[1] = next_color
-                    colors_to_draw^[2] = rand.choice(state^.palette)
-                    if(colors_to_draw^[2][3] == 0){
-                        colors_to_draw^[2] = rl.RED;
+                    state^.colors_buffer[0] = current_color
+                    state^.colors_buffer[1] = next_color
+                    state^.colors_buffer[2] = rand.choice(state^.palette)
+                    if(state^.colors_buffer[2][3] == 0){
+                        state^.colors_buffer[2] = rl.RED;
                     }
                     drawn = true
                 }
             }
-            offset.x += SQUARE_SIZE
+            offset.x += config^.SQUARE_SIZE
         }
         offset.x = controller
-        offset.y += SQUARE_SIZE
+        offset.y += config^.SQUARE_SIZE
     }
 
 preview:\
     if(state^.preview_activated){
-        controller := rl.GetScreenWidth()-i32(SQUARE_SIZE*(len(current)+1))
+        controller := rl.GetScreenWidth()-config^.SQUARE_SIZE*i32(len(current)+1)
         offset2.x = controller
         offset2.y = 0
 
@@ -351,18 +398,18 @@ preview:\
             //fmt.printf("array:%v:%d\n",array,iterations)
             for block in array {
 
-                //fmt.printf("offset2:%v,WINDOW:%v\n",offset2,[2]i32{SCREEN_WIDTH,SCREEN_HEIGHT})
                 if(block == .Block){
                     //fmt.printf("a: %d, b: %d\n",a,b)
-                    rl.DrawRectangle(offset2.x,offset2.y, SQUARE_SIZE, SQUARE_SIZE, current_color)
+                    rl.DrawRectangle(offset2.x,offset2.y, config^.SQUARE_SIZE, config^.SQUARE_SIZE, rl.BLACK)
                 } else if (block == .Empty) {
-                    rl.DrawRectangle(offset2.x,offset2.y, SQUARE_SIZE, SQUARE_SIZE, rl.RAYWHITE)
+                    rl.DrawRectangle(offset2.x,offset2.y, config^.SQUARE_SIZE, config^.SQUARE_SIZE, rl.RAYWHITE)
                 }
+
                 b += 1
-                offset2.x+=SQUARE_SIZE
+                offset2.x+=config^.SQUARE_SIZE
             }
             offset2.x = controller
-            offset2.y += SQUARE_SIZE
+            offset2.y += config^.SQUARE_SIZE
             b = 0
             a += 1
             iterations+=1
