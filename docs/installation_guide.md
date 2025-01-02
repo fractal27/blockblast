@@ -4,7 +4,7 @@
 
 First, [install the Odin compiler][1], then compile and run the program with 
 ```bash
-$ /your/path/to/odin build game.odin -file -v -Wall
+$ /your/path/to/odin build game.odin -file
 ...
 $ ./game
 ```
