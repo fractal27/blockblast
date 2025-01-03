@@ -1,14 +1,24 @@
 //!/usr/bin/env odin build game.odin -file
 
 /*
- * game.odin 0.1.0
+ * game.odin 0.2.0
  * Beta version of a simple 2d game
 ===========================================================
-Label statements:
-    //@CLEARLINES    /*To clear the lines and the columns full.*/
-    //@COLLISIONCHECK/**/
+Label statements to jump searching(in vim):
+    //@JMP              /*To jump here*/
+    //@CLEARLINES       /*To clear the lines and the columns full.*/
+    //@COLLISIONCHECK(1)/*first to indicate the function*/
+    //@COLLISIONCHECK(2)/*second to indicate the point where it checks*/
+    //@ROUNDEDBORDER
+    //@IINIT(1)
+    //@IINIT(2)
+    //@MAINLOOP
+    //@DEINIT
+    //@PREVIEW
 ===========================================================
-TODO: Publish onto github
+TODO: Configuration(drop-down gui and struct)
+######################## TODO: FX and Textures ############
+######################## TODO: Publish onto github#########
 ######################## TODO: Preview#####################
 ######################## TODO: Colors #####################
 ######################## TODO: Pieces #####################
@@ -18,13 +28,14 @@ TODO: Publish onto github
 package example_gui
 import "core:os"
 import "core:math/rand"
+import "core:math"
 import "core:fmt"
 import rl "vendor:raylib"
 
 
 Grid_Square :: enum u8 {
     Empty,
-    Full,
+    //Full,
     Block,
     Fading
 }
@@ -32,15 +43,27 @@ Grid_Square :: enum u8 {
 
 
 Colors :: struct {
-    Empty, Full, Fading: rl.Color 
+    //Empty, Full, Fading: rl.Color 
+    Empty, Fading: rl.Color
 }
 
-SQUARE_SIZE :: 30
-SCREEN_WIDTH :: 400
-SCREEN_HEIGHT :: 500
+BACKGROUND_COLOR :: rl.Color{0x47,0x5b,0xb1,0xff}
+                  //rl.Color{0x4a,0x5a,0x77,0xff}
+INNER_COLOR :: rl.Color{0x24,0x2b,0x51,0xff} //rl.Color{0x39,0x49,0x66,0xff}
+INNER_BORDER :: rl.Color{0x1d,0x25,0x4c,0xff}
 
-GRID_HORZSIZE :: 10
-GRID_VERTSIZE :: 10
+SQUARE_SIZE   :: 50
+SCREEN_WIDTH  :: 900
+SCREEN_HEIGHT :: 800
+
+GRID_HORZSIZE :: 8
+GRID_VERTSIZE :: 8
+
+ROUNDEDNESS_EMPTY :: f32(0.15)
+ROUNDEDNESS_CONTOUR :: f32(0.07)
+
+
+
 
 State :: struct {
     game_over: bool,
@@ -48,15 +71,19 @@ State :: struct {
     to_delete: bool,
     preview_activated: bool,
 
-    grid:        [GRID_HORZSIZE][GRID_VERTSIZE+1]Grid_Square,
-    colors:      [GRID_HORZSIZE][GRID_VERTSIZE+1]rl.Color,
-    palette:     []rl.Color,
+    grid:           [GRID_HORZSIZE][GRID_VERTSIZE+1]Grid_Square,
+    colors:         [GRID_HORZSIZE][GRID_VERTSIZE+1]rl.Color,
 
-    pieces_buffer:[3][][]Grid_Square,
-    colors_buffer:[3]rl.Color,
+    palette:        []rl.Color,
+    texture:        rl.Texture2D,
+    fx_clear:       rl.Sound,
+    //TODO: fx_collision
 
+    pieces_buffer:  [3][][]Grid_Square,
+    colors_buffer:  [3]rl.Color,
+    mouse_position: rl.Vector2,
 
-    mouse_position : rl.Vector2,
+    rounded_border_activated: bool,
     color_configuration: Colors
 }
 
@@ -73,40 +100,31 @@ pieces: [][][]Grid_Square = {
 
 
 
-main :: proc() {
-    //initialization
 
-    rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Test")
-    defer rl.CloseWindow()
-
-    state: State
-
-    init_game(&state)
-    fmt.printf("color_buffer = %v\n",state.colors_buffer);
-    //main loop
-    rl.SetTargetFPS(60) 
-    for !rl.WindowShouldClose(){
-        update_game(&state)
-        draw_game(&state)
-    }
-}
-
-init_game :: proc(state: ^State) {
-
+init_state :: proc(state: ^State, img: ^rl.Image) {
+    //@IINIT(1)
     state^.to_delete = false
     state^.color_configuration = Colors {
-        Empty=rl.BLACK,
-        Full=rl.GRAY,
+        //Empty=rl.BLACK,
+        //Full=rl.Color{0x3d,0x6b,0x84,0xff}, //Full=BACKGROUND_COLOR,
+        Empty=INNER_COLOR,//rl.Color{0x0c,0x2d,0x48,0xff},
         Fading = rl.RED
     }
     palette := []rl.Color {
-        rl.YELLOW,
         rl.RED,
+        rl.YELLOW,
         rl.GREEN,
         rl.BLUE,
         rl.PURPLE,
-        rl.BROWN
+        rl.BROWN,
+        rl.ORANGE,
+        rl.LIGHTGRAY
     }
+
+    rl.ImageFlipHorizontal(img);
+    rl.ImageResize(img,SQUARE_SIZE,SQUARE_SIZE)
+    state^.texture = rl.LoadTextureFromImage(img^);
+    state^.fx_clear = rl.LoadSound("../assets/clear.wav")
 
     state^.pieces_buffer = {
         rand.choice(pieces),
@@ -120,26 +138,46 @@ init_game :: proc(state: ^State) {
     }
     state^.palette = palette
     state^.preview_activated = true;
+    state^.rounded_border_activated = true;
 
     fmt.printf("vect:%v\n",state^.palette);
     state^.grid = {}
 
-    for j in 0..<GRID_VERTSIZE {
-        for i in 0..<GRID_HORZSIZE {
-            switch {
-            case j == GRID_VERTSIZE - 1,
-                 i == GRID_HORZSIZE-1,
-                 i == 0,
-                 j == 0:
-                state^.grid[i][j] = .Full
-            }
-        }
-    }
 }
+
+
+
+main :: proc() {
+    //@IINIT(2)
+    state: State
+    img: rl.Image 
+
+
+    rl.InitAudioDevice()
+    rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Test")
+    defer rl.CloseWindow()
+
+    img = rl.LoadImage("../assets/block.png")
+    init_state(&state,&img)    //@IINIT
+    defer deinit(&state) //@DEINIT
+    rl.UnloadImage(img); //texture has been loaded.
+
+    fmt.printf("color_buffer = %v\n",state.colors_buffer);
+    //@MAINLOOP
+    rl.SetTargetFPS(60) 
+    for !rl.WindowShouldClose(){
+        update_game(&state)
+        draw_game(&state)
+    }
+
+}
+
 
 update_game :: proc(state: ^State){
     if state^.game_over && rl.IsKeyPressed(.ENTER){
-        init_game(state)
+        image := rl.LoadImageFromTexture(state^.texture)
+        init_state(state,&image)
+        rl.UnloadImage(image)
         state^.game_over = false
         return
     } else if rl.IsKeyPressed(.P) {
@@ -159,22 +197,27 @@ update_game :: proc(state: ^State){
 
 
         for line in lines {
-            for i in 1..<GRID_HORZSIZE-1{
+            for i in 0..<GRID_HORZSIZE{
                 state^.grid[i][line] = .Empty
             }
+            fmt.printf("Playing sound.\n");
+            rl.PlaySound(state^.fx_clear)
         }
 
         for col in cols {
-            for j in 1..<GRID_VERTSIZE-1{
+            for j in 0..<GRID_VERTSIZE{
                 state^.grid[col][j] = .Empty
             }
+            fmt.printf("Playing sound.\n");
+            rl.PlaySound(state^.fx_clear)
         }
 
         state^.to_delete = false
     }
 }
 
-check_collision :: proc(state: State, piece: [][]Grid_Square, i: int, j: int) -> bool{ //@COLLISIONCHECK
+check_collision :: proc(state: State, piece: [][]Grid_Square, i: int, j: int) -> bool{ 
+    //@COLLISIONCHECK(1)
     collision: bool = false
     a:int = 0
     b:int = 0
@@ -182,7 +225,7 @@ check_collision :: proc(state: State, piece: [][]Grid_Square, i: int, j: int) ->
 
 collision_loop: for array in piece {
         for block in array {
-            if block == .Block && (state.grid[i+b][j+a] == .Block || state.grid[i+b][j+a] == .Full){
+            if block == .Block && (state.grid[i+b][j+a] == .Block){//|| state.grid[i+b][j+a] == .Full){
                 fmt.printf("check_collision: collision found at: (a,b,i,j,grid_at)=%v,%s.\n",
                     [4]int{a,b,i,j},state.grid[i+b][j+a])
                 collision = true
@@ -202,10 +245,10 @@ blocks_to_clear :: proc(grid: [GRID_HORZSIZE][GRID_VERTSIZE + 1]Grid_Square) -> 
     lines: [dynamic]i32 = {}
     cols: [dynamic]i32 = {}
 
-    for i in 1..<GRID_HORZSIZE-1{
+    for i in 0..<GRID_HORZSIZE{
         cleared = true
         //fmt.printf("clearing line %i\n",i)
-        for j in 1..<GRID_VERTSIZE-1 {
+        for j in 0..<GRID_VERTSIZE {
             if grid[j][i] == .Empty {
                 //fmt.printf("\t(column is empty: %d)\n",j)
                 cleared = false
@@ -217,10 +260,10 @@ blocks_to_clear :: proc(grid: [GRID_HORZSIZE][GRID_VERTSIZE + 1]Grid_Square) -> 
         }
     }
 
-    for i in 1..<GRID_VERTSIZE-1{
+    for i in 0..<GRID_VERTSIZE{
         cleared = true
         //fmt.printf("clearing column %i\n",i)
-        for j in 1..<GRID_HORZSIZE-1{
+        for j in 0..<GRID_HORZSIZE{
             if(grid[i][j] == .Empty){
                 //fmt.printf("\t(at row %i is empty)\n",j)
                 cleared = false
@@ -249,7 +292,7 @@ draw_game :: proc(state: ^State)->bool{
     current_color := state^.colors_buffer[1]
     next_color := state^.colors_buffer[2]
 
-    rl.ClearBackground(rl.RAYWHITE)
+    rl.ClearBackground(BACKGROUND_COLOR)
     drawn := false
 
 
@@ -265,7 +308,7 @@ draw_game :: proc(state: ^State)->bool{
 
     offset := [2]i32 {
         SCREEN_WIDTH/2 - (GRID_HORZSIZE*SQUARE_SIZE/2) ,
-        SCREEN_HEIGHT/2 - (GRID_HORZSIZE*SQUARE_SIZE/2),
+        SCREEN_HEIGHT/2 - (GRID_HORZSIZE*SQUARE_SIZE/2) - 50,
     }
     offset2 := [2]i32{}
 
@@ -275,18 +318,20 @@ draw_game :: proc(state: ^State)->bool{
         for i in 0..<GRID_HORZSIZE {
             #partial switch(state^.grid[i][j]){ //#partial switch
                 case .Empty:
-                    rl.DrawLine(offset.x, offset.y, offset.x + SQUARE_SIZE, offset.y, state^.color_configuration.Empty)
-                    rl.DrawLine(offset.x, offset.y, offset.x, offset.y + SQUARE_SIZE, state^.color_configuration.Empty)
-                    rl.DrawLine(offset.x + SQUARE_SIZE, offset.y, offset.x + SQUARE_SIZE,offset.y, state^.color_configuration.Empty)
-                    rl.DrawLine(offset.x, offset.y, offset.x + SQUARE_SIZE, offset.y, state^.color_configuration.Empty)
-                case .Full:
-                    rl.DrawRectangle(offset.x,offset.y, SQUARE_SIZE, SQUARE_SIZE, state^.color_configuration.Full)
+                    rec := rl.Rectangle{f32(offset.x),f32(offset.y), SQUARE_SIZE-2, SQUARE_SIZE-2}
+                    rl.DrawRectangleRounded(rec,ROUNDEDNESS_EMPTY,0, rl.Fade(state^.color_configuration.Empty,0.3))
+                    /*rl.DrawLine(offset.x, offset.y, offset.x + SQUARE_SIZE, offset.y, INNER_BORDER)
+                    rl.DrawLine(offset.x, offset.y, offset.x, offset.y + SQUARE_SIZE, INNER_BORDER)
+                    rl.DrawLine(offset.x + SQUARE_SIZE, offset.y, offset.x + SQUARE_SIZE,offset.y, INNER_BORDER)
+                    rl.DrawLine(offset.x, offset.y, offset.x + SQUARE_SIZE, offset.y, INNER_BORDER)*/
+                //case .Full:
+                    //rl.DrawRectangle(offset.x,offset.y, SQUARE_SIZE, SQUARE_SIZE, state^.color_configuration.Full)
                 case .Block:
-                    rl.DrawRectangle(offset.x,offset.y, SQUARE_SIZE, SQUARE_SIZE, state^.colors[i][j])
+                    rl.DrawTexture(state^.texture, offset.x, offset.y, state^.colors[i][j])
                 case:
                     fmt.printf("Error: block type not recognized.")
             }
-            /* a part of the update, but for optimization this will stay here */
+            /* a part of the update function, but for optimization this will stay here */
             if !state^.pause && f32(offset.x) < state^.mouse_position.x \
                  && state^.mouse_position.x < f32(offset.x) + SQUARE_SIZE{
                 if f32(offset.y) < state^.mouse_position.y &&\
@@ -294,7 +339,7 @@ draw_game :: proc(state: ^State)->bool{
                      && rl.IsMouseButtonPressed(.LEFT){
                     //fmt.printf("selected color: %v\n" ,current_color)
 
-                    if(check_collision(state^, current, i, j)){ //@COLLISIONCHECK
+                    if(check_collision(state^, current, i, j)){ //@COLLISIONCHECK(2)
                         offset.x += SQUARE_SIZE
                         break
                     }
@@ -336,12 +381,26 @@ draw_game :: proc(state: ^State)->bool{
         offset.x = controller
         offset.y += SQUARE_SIZE
     }
+rounded_border: if(state^.rounded_border_activated){
+        //@ROUNDEDBORDER
+        offset = [2]i32 {
+            SCREEN_WIDTH/2 - (GRID_HORZSIZE*SQUARE_SIZE/2)- 15 ,
+            SCREEN_HEIGHT/2 - (GRID_HORZSIZE*SQUARE_SIZE/2) - 65,
+        }
+        rec := rl.Rectangle{f32(offset.x),f32(offset.y),SQUARE_SIZE*GRID_HORZSIZE+30,SQUARE_SIZE*GRID_VERTSIZE+30}
+        rl.DrawRectangleRounded(rec,ROUNDEDNESS_CONTOUR,0, state^.color_configuration.Empty-{0x11,0x11,0x11,0xf0})
+
+    }
+
+
 
 preview:\
-    if(state^.preview_activated){
-        controller := rl.GetScreenWidth()-i32(SQUARE_SIZE*(len(current)+1))
-        offset2.x = controller
-        offset2.y = 0
+    if(state^.preview_activated){//@PREVIEW
+        offset2 := [2]i32 {
+            SCREEN_WIDTH/2 - i32(len(current)*SQUARE_SIZE/2) ,
+            SCREEN_HEIGHT - i32(SQUARE_SIZE*(len(current)+1))
+        }
+        controller = offset2.x
 
         a := 0
         b := 0
@@ -354,9 +413,10 @@ preview:\
                 //fmt.printf("offset2:%v,WINDOW:%v\n",offset2,[2]i32{SCREEN_WIDTH,SCREEN_HEIGHT})
                 if(block == .Block){
                     //fmt.printf("a: %d, b: %d\n",a,b)
-                    rl.DrawRectangle(offset2.x,offset2.y, SQUARE_SIZE, SQUARE_SIZE, current_color)
+                    //rl.DrawRectangle(offset2.x,offset2.y, SQUARE_SIZE, SQUARE_SIZE, current_color)
+                    rl.DrawTexture(state^.texture, offset2.x, offset2.y, current_color)
                 } else if (block == .Empty) {
-                    rl.DrawRectangle(offset2.x,offset2.y, SQUARE_SIZE, SQUARE_SIZE, rl.RAYWHITE)
+                    rl.DrawRectangle(offset2.x,offset2.y, SQUARE_SIZE, SQUARE_SIZE, BACKGROUND_COLOR)
                 }
                 b += 1
                 offset2.x+=SQUARE_SIZE
@@ -371,4 +431,8 @@ preview:\
     return drawn
 }
 
-
+deinit :: proc(state: ^State){ //@DEINIT
+    rl.UnloadSound(state^.fx_clear)
+    rl.CloseAudioDevice()
+    rl.CloseWindow()
+}
