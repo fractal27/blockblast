@@ -8,8 +8,5 @@ Published under the GPL license.
 
 ## Installation
 
-To install, see the (install guide)[1]
-
-
-    [1] docs/installation_guide.md
+To install, see the [install guide](docs/installation_guide.md)
 
