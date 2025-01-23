@@ -1,29 +1,30 @@
 //!/usr/bin/env odin build game.odin -file
 
 /*
- * game.odin v0.2.1
+ * game.odin v0.2.2
  * Beta version of a simple 2d game
-===========================================================
-Label statements to jump searching:
-    //@JMP              /*To jump here*/
-    //@CLEARLINES       /*To clear the lines and the columns full.*/
-    //@COLLISIONCHECK(1)/*second to indicate the point where it checks*/
-    //@COLLISIONCHECK(2)/*first to indicate the function*/
-    //@ROUNDEDBORDER
-    //@IINIT(1)
-    //@IINIT(2)
-    //@MAINLOOP
-    //@PREVIEW
+ ===========================================================
+ Label statements to jump searching:
+//@JMP              /*To jump here*/
+//@CLEARLINES       /*To clear the lines and the columns full.*/
+//@COLLISIONCHECK(1)/*second to indicate the point where it checks*/
+//@COLLISIONCHECK(2)/*first to indicate the function*/
+//@ROUNDEDBORDER
+//@IINIT(1)
+//@IINIT(2)
+//@MAINLOOP
+//@PREVIEW
 ===========================================================
 TODO:drop-down gui and struct
 TODO: Configuration
-######################## TODO:  C-z button and fix sound and a graphic bug
-######################## TODO:  Fix graphic bug ############
-######################## TODO:  FX and Textures ############
-######################## TODO:  Publish onto github#########
-######################## TODO:  Preview#####################
-######################## TODO:  Colors #####################
-######################## TODO:  Pieces #####################
+TODO: Fix bugs on win32(windows)
+ ######################## TODO:  C-z button and fix sound and a graphic bug
+ ######################## TODO:  Fix graphic bug ############
+ ######################## TODO:  FX and Textures ############
+ ######################## TODO:  Publish onto github#########
+ ######################## TODO:  Preview#####################
+ ######################## TODO:  Colors #####################
+ ######################## TODO:  Pieces #####################
 */
 
 
@@ -40,20 +41,20 @@ import "core:c/libc"
 import rl "vendor:raylib"
 
 Grid_Square :: enum u8 {
-    Empty, //Full,
-    Block,
-    Fading
+  Empty, //Full,
+  Block,
+  Fading
 }
 
 error :: distinct []i32 //debugging info
 
 Colors :: struct {
-    //Empty, Full, Fading: rl.Color 
-    Empty, Fading: rl.Color
+  //Empty, Full, Fading: rl.Color 
+  Empty, Fading: rl.Color
 }
 
 BACKGROUND_COLOR :: rl.Color{0x47,0x5b,0xb1,0xff}
-                  //rl.Color{0x4a,0x5a,0x77,0xff}
+//rl.Color{0x4a,0x5a,0x77,0xff}
 INNER_COLOR :: rl.Color{0x24,0x2b,0x51,0xff} //rl.Color{0x39,0x49,0x66,0xff}
 INNER_BORDER :: rl.Color{0x1d,0x25,0x4c,0xff}
 
@@ -66,7 +67,14 @@ GRID_VERTSIZE :: 8
 
 ROUNDEDNESS_EMPTY :: f32(0.15)
 ROUNDEDNESS_CONTOUR :: f32(0.07)
-
+DEFAULT_PALETTE:[]rl.Color : {
+    rl.Color{0xff,0x00,0x00,0xff},
+    rl.Color{0x00,0xff,0x00,0xff},
+    rl.Color{0x00,0x00,0xff,0xff},
+    rl.Color{0xff,0xff,0x00,0xff},
+    rl.Color{0x00,0xff,0xff,0xff},
+    rl.Color{0xff,0x00,0xff,0xff}
+}
 
 
 
@@ -111,7 +119,7 @@ pieces: [][][]Grid_Square = {
     {{.Block},{.Block,.Block},{.Block}},
     {{.Empty,.Block},{.Block}},
     {{.Empty,.Block},{.Block}}
-};
+    };
 
 
 
@@ -125,30 +133,32 @@ check_collision :: proc(state: State, piece: [][]Grid_Square, i: int, j: int,sou
 
     collision_loop_2:\
     for array in piece {
-            for block in array {
-                if i+b < len(state.grid) && j+a < len(state.grid[i]){
+        for block in array {
+            if    i+b <= GRID_VERTSIZE-1\
+               && j+a <= GRID_HORZSIZE-1{
                     if block == .Block && (state.grid[i+b][j+a] == .Block){
                         //|| state.grid[i+b][j+a] == .Full){
+                        //fmt.println("\e[31mcollision found at",i+b,j+a,"\e[0m")
                         collision = true
                         err := []int{a,b,i,j}
                         break collision_loop_2
                     }
-                } else {
-                    fmt.println("collision_error: position out of bounds")
+            } else {
+                    //fmt.println("\e[31mcollision_error: position out of bounds:",i+b,j+a,"\e[0m")
                     collision = true
                     err := []int{a,b,i,j}
                     break collision_loop_2
-                }
-                b += 1
             }
-            b = 0
-            a += 1
+            b += 1
+        }
+        b = 0
+        a += 1
     }
-    if !collision {
-        fmt.println("piece ",piece," not collide, i,j,a,b=",i,j,a,b)
-    }
+    /*if !collision {
+      fmt.println("piece ",piece," not collide, i,j,a,b=",i,j,a,b)
+      }*/
     if collision && sound{
-            rl.PlaySound(state.fx_collision)
+        rl.PlaySound(state.fx_collision)
     }
     return collision,err
 }
@@ -168,7 +178,7 @@ blocks_to_clear :: proc(grid: [GRID_HORZSIZE][GRID_VERTSIZE + 1]Grid_Square) -> 
             }
         }
         if(cleared){
-            fmt.printf("lines:%v\n",lines)
+            fmt.printf("to clear(lines):%v\n",lines)
             append(&lines, i32(i))
         }
     }
@@ -182,7 +192,7 @@ blocks_to_clear :: proc(grid: [GRID_HORZSIZE][GRID_VERTSIZE + 1]Grid_Square) -> 
         }
         if(cleared){
             append(&cols, i32(i))
-            fmt.printf("cols:%v\n",cols)
+            fmt.printf("to clear(cols):%v\n",cols)
         }
     }
     return lines, cols
@@ -193,7 +203,7 @@ blocks_to_clear :: proc(grid: [GRID_HORZSIZE][GRID_VERTSIZE + 1]Grid_Square) -> 
 
 
 
-init_state :: proc(state: ^State, img: ^rl.Image,assets_dir: string = "../assets/") {
+init_state :: proc(state: ^State, img: ^rl.Image,palette: []rl.Color = DEFAULT_PALETTE,assets_dir: string = "../assets/") {
     //@IINIT(1)
     state^.to_delete = false
     state^.color_configuration = Colors {
@@ -202,16 +212,20 @@ init_state :: proc(state: ^State, img: ^rl.Image,assets_dir: string = "../assets
         Empty=INNER_COLOR,//rl.Color{0x0c,0x2d,0x48,0xff},
         Fading = rl.RED
     }
+    state^.palette = make([]rl.Color,len(palette))
+    for i in 0..<len(palette){
+        state^.palette[i] = palette[i]
+    }
     //palette := 
 
     rl.ImageFlipHorizontal(img);
     rl.ImageResize(img,SQUARE_SIZE,SQUARE_SIZE)
     state^.texture = rl.LoadTextureFromImage(img^);
-    state^.fx_clear = rl.LoadSound(strings.unsafe_string_to_cstring(strings.concatenate({assets_dir,"clear.wav"})))
+    state^.fx_clear = rl.LoadSound(strings.unsafe_string_to_cstring(strings.concatenate({assets_dir,"/clear.wav"})))
     state^.fx_place = rl.LoadSound(strings.unsafe_string_to_cstring(strings.concatenate({assets_dir,"/place_block2.mp3"})))
     state^.fx_collision = rl.LoadSound(strings.unsafe_string_to_cstring(strings.concatenate({assets_dir,"/collision.mp3"})))
     state^.fx_gameover = rl.LoadSound(strings.unsafe_string_to_cstring(strings.concatenate({assets_dir,"/failed.wav"})))
-    
+
     state^.pieces_buffer = {
         rand.choice(pieces),
         rand.choice(pieces),
@@ -226,7 +240,7 @@ init_state :: proc(state: ^State, img: ^rl.Image,assets_dir: string = "../assets
         rand.choice(state^.palette),
         rl.Color{0,0,0,0} //prossimo prossimo
     }
-    
+
 
     state^.preview_activated = true;
     state^.rounded_border_activated = true;
@@ -235,7 +249,7 @@ init_state :: proc(state: ^State, img: ^rl.Image,assets_dir: string = "../assets
     state^.font_gameover = rl.LoadFontEx("../assets/fonts/a_glitch_in_time.ttf",40,nil,0)
     state^.combo = 0
     state^.XP = 0
-    state^.str = make([^]u8,1000)
+    state^.str = make([^]u8,100)
     //fmt.printf("palette(init):%v\n",state^.palette);
     state^.grid = {}
 
@@ -255,16 +269,6 @@ main :: proc() {
     defer rl.CloseWindow()
     rl.SetExitKey(.Q)
 
-
-    state.palette = []rl.Color {
-        rl.Color{0xff,0x00,0x00,0xff},
-        rl.Color{0x00,0xff,0x00,0xff},
-        rl.Color{0x00,0x00,0xff,0xff},
-        rl.Color{0xff,0xff,0x00,0xff},
-        rl.Color{0x00,0xff,0xff,0xff},
-        rl.Color{0xff,0x00,0xff,0xff}
-    }
-
     img = rl.LoadImage("../assets/block.png")
     init_state(&state,&img)    //@IINIT
 
@@ -275,7 +279,7 @@ main :: proc() {
 
     rl.UnloadImage(img); //texture has been loaded.
 
-    fmt.printf("color_buffer = %v\n",state.colors_buffer);
+    //fmt.printf("color_buffer = %v\n",state.colors_buffer);
     //@MAINLOOP
     rl.SetTargetFPS(70)
     for !rl.WindowShouldClose(){
@@ -296,6 +300,7 @@ update_game :: proc(state: ^State){
         init_state(state,&image)
         rl.UnloadImage(image)
         state^.game_over = false
+        state^.gameover_drawn = false
         return
     } else if rl.IsKeyPressed(.P) {
         state^.pause = !state^.pause
@@ -314,8 +319,8 @@ update_game :: proc(state: ^State){
     if state^.control_pressed && rl.IsKeyPressed(.Z){
         //C-z pressed
         if ((len(state^.pieces_buffer[0]) > 0)\
-                && (len(state^.colors_buffer[0]) > 0)\
-                && state^.combo == 0){
+            && (len(state^.colors_buffer[0]) > 0)\
+            && state^.combo == 0){
             //fmt.println("pieces_buffer before:",state^.pieces_buffer)
             /*please do not reorder.*/
             state^.pieces_buffer[3] = state^.pieces_buffer[2]
@@ -388,13 +393,13 @@ update_game :: proc(state: ^State){
         SCREEN_WIDTH/2 - (GRID_HORZSIZE*SQUARE_SIZE/2) ,
         SCREEN_HEIGHT/2 - (GRID_HORZSIZE*SQUARE_SIZE/2) - 50,
     }
-    
+
     collisioncheck:\
     if(state^.mouse_position.x > offset.x\
-            && state^.mouse_position.x < offset.x+GRID_HORZSIZE*SQUARE_SIZE-2\
-            && state^.mouse_position.y > offset.y\
-            && state^.mouse_position.y < offset.y+GRID_HORZSIZE*SQUARE_SIZE-2\
-            && rl.IsMouseButtonPressed(.LEFT)) {
+        && state^.mouse_position.x < offset.x+GRID_HORZSIZE*SQUARE_SIZE-2\
+        && state^.mouse_position.y > offset.y\
+        && state^.mouse_position.y < offset.y+GRID_HORZSIZE*SQUARE_SIZE-2\
+        && rl.IsMouseButtonPressed(.LEFT)) {
 
 
         i := int ((state^.mouse_position.x-offset.x)/SQUARE_SIZE)
@@ -405,29 +410,25 @@ update_game :: proc(state: ^State){
         next := state^.pieces_buffer[2]
         next_next := state^.pieces_buffer[3]
         next_next_next := state^.pieces_buffer[3]
-    
+
         previous_color := state^.colors_buffer[0]
         current_color := state^.colors_buffer[1]
         next_color := state^.colors_buffer[2]
         next_next_color := state^.colors_buffer[3]
 
 
-        
+
         //current = state^.grid[pos.x,pos.y]
         if collision,err := check_collision(state^, current, i, j); collision{  //@COLLISIONCHECK(1)
-            fmt.printf("check_collision: collision found at: (a,b,i,j)=%v.\n",err)
             break collisioncheck
         }
 
-        //fmt.printf("state^.colors:(%d)->%d->%d\n",previous_color,current_color,next_color)
         state^.colors_buffer[0] = state^.colors_buffer[1]
         state^.colors_buffer[1] = state^.colors_buffer[2]
-        //fmt.println("colors_buffer[3]: ",state^.colors_buffer[3])
         state^.colors_buffer[2] = state^.colors_buffer[3] == rl.Color{0,0,0,0} ? rand.choice(state^.palette): state^.colors_buffer[3]
         state^.colors_buffer[3] = state^.colors_buffer[4] == rl.Color{0,0,0,0} ? rand.choice(state^.palette): state^.colors_buffer[4]
         state^.colors_buffer[4] = rl.Color{0,0,0,0}
-        //fmt.println("(finished) -- colors_buffer[3]: ",state^.colors_buffer[3],",colors_buffer[2]:",state^.colors_buffer[2])
-        
+
 
 
         //fmt.printf("playing sound for block placement.\n")
@@ -435,9 +436,7 @@ update_game :: proc(state: ^State){
 
         a := 0
         b := 0
-        
-        //fmt.println("Iterating: ", current)
-        //fmt.println("reversible::before =", state^.reversible)
+
         if len(state^.reversible) > 0 {
             clear(&(state^.reversible))
         }
@@ -466,18 +465,18 @@ update_game :: proc(state: ^State){
         state^.pieces_buffer[3] = len(state^.pieces_buffer[4]) == 0? rand.choice(pieces): state^.pieces_buffer[4]
         state^.pieces_buffer[4] = {}
         //fmt.println("after:",state^.pieces_buffer)
-        
+
 
         //fmt.printf("state^.colors:(%d)->%d->%d\n",previous_color,current_color,next_color)
         state^.colors_buffer[0] = current_color
         state^.colors_buffer[1] = next_color
         state^.colors_buffer[2] = rand.choice(state^.palette)
         state^.colors_buffer[3] = state^.colors_buffer[4] == rl.Color{0,0,0,0} ? rand.choice(state^.palette)\
-                                                                               : state^.colors_buffer[4]
+        : state^.colors_buffer[4]
         state^.colors_buffer[4] = rl.Color{0,0,0,0}
         state^.colors_buffer[3] = rl.Color{0,0,0,0}
 
-        
+
     }
 }
 
@@ -486,44 +485,6 @@ is_gameover :: proc(state: ^State){
     current := state^.pieces_buffer[1]
     current_gameover := true
 
-    check_collision_custom :: proc(state: State, piece: [][]Grid_Square, i:int, j:int, ignore: [2]int) -> (collision:bool = false, info:[]int) {
-        a,b:int
-        //fmt.printf("\e[43m-- collision check for gameover(i=%d,j=%d) --\e[0m\n",i,j)
-        collision_loop:\
-        for array in piece {
-            for block in array {
-                //if ignore.x != i+b || ignore.y!=j+a {
-                    //fmt.println("checking i,j=",i+b,j+a)
-                if i+b < len(state.grid) && j+a < len(state.grid[i]){
-                    if block == .Block {
-                        //fmt.printf("#")
-                        if block == .Block && (state.grid[i+b][j+a] == .Block){
-                            //|| state.grid[i+b][j+a] == .Full){
-                            //fmt.println("\e[44>>>>>>>>>>>>>>>> collision for  i,j=",i,j,"<<<<<<<<<<<<<<<<<\e[0m")
-                            collision = true
-                            info = []int{i+b,j+a}
-                            break collision_loop
-                        }
-                    } else {
-                        //fmt.printf(" ")
-                    }
-                } else {
-                    //fmt.println("collision_error: position out of bounds")
-                    collision = true
-                    info = []int{i+b,j+a}
-                    break collision_loop
-                }
-                /*} else {
-                    fmt.println("\e[33m [ WARNING ]: not checking i,j=",i+b,j+a,"\e[0m")
-                }*/
-                b += 1
-            }
-            //fmt.printf("\n")
-            b = 0
-            a += 1
-        }
-        return collision, info
-    }
     maxlen := 0
 
     if state^.game_over{
@@ -542,7 +503,8 @@ is_gameover :: proc(state: ^State){
     for i in 0..<GRID_VERTSIZE-len(current)+1 {
         for j in 0..<GRID_HORZSIZE-maxlen+1{
             //fmt.println("checking collision with current:",i,j)
-            if collision,err := check_collision_custom(state^,current,i,j,[2]int{i,j}); !collision{
+            collision,err := check_collision(state^,current,i,j,false);
+            if !collision{
                 current_gameover = false
                 //fmt.println("\e[42mcurrent: non-collision found info:",err,"\e[0m")
                 break collisionloop
@@ -553,6 +515,7 @@ is_gameover :: proc(state: ^State){
     state^.game_over = current_gameover
 
     if state^.game_over {
+		fmt.printf("playing gameover sound.\n")
         rl.PlaySound(state^.fx_gameover)
     }
 }
@@ -562,13 +525,10 @@ draw_game :: proc(state: ^State){
     defer rl.EndDrawing()
 
     if state^.game_over {
-        if !state^.gameover_drawn {
-            text :: "Press ENTER to play again"
-            rl.DrawTextEx(state^.font_gameover, text, rl.Vector2{
-                f32(rl.GetScreenWidth()/2 - rl.MeasureText(text, state^.font_gameover.baseSize)/2),
-                f32(rl.GetScreenHeight()/2 - 50)}, f32(state^.font_gameover.baseSize)*2.0, 1, rl.RED)
-            state^.gameover_drawn = true
-        }
+		text :: "Press ENTER to play again"
+		rl.DrawTextEx(state^.font_gameover, text, rl.Vector2{
+			f32(rl.GetScreenWidth()/2 - rl.MeasureText(text, state^.font_gameover.baseSize)/2),
+			f32(rl.GetScreenHeight()/2 - 50)}, f32(state^.font_gameover.baseSize)*2.0, 1, rl.RED)
         return
     }
 
@@ -590,9 +550,9 @@ draw_game :: proc(state: ^State){
     next_color: rl.Color= state^.colors_buffer[2]
 
     rl.ClearBackground(BACKGROUND_COLOR)
-    
-    
-    
+
+
+
 
     offset := [2]i32 {
         SCREEN_WIDTH/2 - (GRID_HORZSIZE*SQUARE_SIZE/2) ,
@@ -605,17 +565,13 @@ draw_game :: proc(state: ^State){
     for j in 0..<GRID_VERTSIZE {
         for i in 0..<GRID_HORZSIZE {
             #partial switch(state^.grid[i][j]){ //#partial switch
-                case .Empty:
-                    rec := rl.Rectangle{f32(offset.x),f32(offset.y), SQUARE_SIZE-2, SQUARE_SIZE-2}
-                    rl.DrawRectangleRounded(rec,ROUNDEDNESS_EMPTY,0, rl.Fade(state^.color_configuration.Empty,.2))
-                    /*rl.DrawLine(offset.x, offset.y, offset.x + SQUARE_SIZE, offset.y, INNER_BORDER)
-                    rl.DrawLine(offset.x, offset.y, offset.x, offset.y + SQUARE_SIZE, INNER_BORDER)
-                    rl.DrawLine(offset.x + SQUARE_SIZE, offset.y, offset.x + SQUARE_SIZE,offset.y, INNER_BORDER)
-                    rl.DrawLine(offset.x, offset.y, offset.x + SQUARE_SIZE, offset.y, INNER_BORDER)*/
-                case .Block:
-                    rl.DrawTexture(state^.texture, offset.x, offset.y, state^.colors[i][j])
-                case:
-                    fmt.printf("Error: block type not recognized.")
+            case .Empty:
+                rec := rl.Rectangle{f32(offset.x),f32(offset.y), SQUARE_SIZE-2, SQUARE_SIZE-2}
+                rl.DrawRectangleRounded(rec,ROUNDEDNESS_EMPTY,0, rl.Fade(state^.color_configuration.Empty,.2))
+            case .Block:
+                rl.DrawTexture(state^.texture, offset.x, offset.y, state^.colors[i][j])
+            case:
+                fmt.printf("\e[31mError: block type not recognized.\e[0m")
             }
             offset.x += SQUARE_SIZE
         }
@@ -643,57 +599,54 @@ draw_game :: proc(state: ^State){
 
     preview:\
     if(state^.preview_activated){//@PREVIEW
-            offset2 := [2]i32 {
-                SCREEN_WIDTH/2 - i32(len(current)*SQUARE_SIZE/2) ,
-                SCREEN_HEIGHT - i32(SQUARE_SIZE*(len(current)+1))
-            }
-            controller = offset2.x
+		/*i: u32 = rand.uint32()
+		fmt.printf("drawing preview %d\n",i)*/
+        offset2 := [2]i32 {
+            SCREEN_WIDTH/2 - i32(len(current)*SQUARE_SIZE/2) ,
+            SCREEN_HEIGHT - i32(SQUARE_SIZE*(len(current)+1))
+        }
+        controller = offset2.x
 
-            a := 0
-            b := 0
+        a := 0
+        b := 0
 
-            iterations := 0
-            for array in current{
-                //fmt.printf("Cycle %d: array:%v\n(curr=%v)",iterations,array,current)
-                for block in array {
-                    //fmt.printf("offset2:%v,WINDOW:%v\n",offset2,
-                    //          [2]i32{SCREEN_WIDTH,SCREEN_HEIGHT})
-                    if(block == .Block){
-                        rl.DrawRectangle(offset2.x+2,offset2.y+2, SQUARE_SIZE, SQUARE_SIZE, {0,0,0,0x66}) //SHADOW
-                        rl.DrawTexture(state^.texture, offset2.x, offset2.y, current_color)
-                    } else if (block == .Empty) {
-                        rl.DrawRectangle(offset2.x,offset2.y, SQUARE_SIZE, SQUARE_SIZE, BACKGROUND_COLOR)
-                    }
-                    b += 1
-                    offset2.x+=SQUARE_SIZE
+        iterations := 0
+        for array in current{
+            for block in array {
+                if(block == .Block){
+                    rl.DrawRectangle(offset2.x+2,offset2.y+2, SQUARE_SIZE, SQUARE_SIZE, {0,0,0,0x66}) //SHADOW
+                    rl.DrawTexture(state^.texture, offset2.x, offset2.y, current_color)
+                } else if (block == .Empty) {
+                    rl.DrawRectangle(offset2.x,offset2.y, SQUARE_SIZE, SQUARE_SIZE, BACKGROUND_COLOR)
                 }
-                offset2.x = controller
-                offset2.y += SQUARE_SIZE
-                b = 0
-                a += 1
-                iterations+=1
-                /*fmt.printf("(trying to print) -- ")
-                if iterations < len(current){
-                    fmt.printf("array after: %v\n",current[iterations])
-                }*/
+                b += 1
+                offset2.x+=SQUARE_SIZE
+            }
+            offset2.x = controller
+            offset2.y += SQUARE_SIZE
+            b = 0
+            a += 1
+            iterations+=1
+            /*fmt.printf("(trying to print) -- ")
+              if iterations < len(current){
+              fmt.printf("array after: %v\n",current[iterations])
+              }*/
         }
     }
     if state^.XP > 0 {
-        size := uint(libc.ceil(libc.log10(f32(state^.XP))+1)+1)
-        str: [^]u8 = state^.str
-        libc.snprintf(str,size,"%d",state^.XP)
-
-        xp_str := cstring(str)
+		//size := uint(linalg.ceil(linalg.log10(f32(state^.XP))+1)+1)
+		xp_str := fmt.caprintf("%d",state^.XP)
 
         rl.DrawTextEx(state^.font, xp_str, rl.Vector2{\
             f32(rl.GetScreenWidth()/2 - rl.MeasureText(xp_str, 20)/2),
-            50.0},
-            f32(state^.font.baseSize)*2.0, 1, rl.Fade(rl.RED,0.8))
+        50.0},
+        f32(state^.font.baseSize)*2.0, 1, rl.Fade(rl.RED,0.8))
     } else {
         rl.DrawTextEx(state^.font, "0", rl.Vector2{\
             f32(rl.GetScreenWidth()/2 - rl.MeasureText("0", 20)/2),
-            50.0},
-            f32(state^.font.baseSize)*2.0, 1, rl.Fade(rl.RED,0.8))
+        50.0},
+        f32(state^.font.baseSize)*2.0, 1, rl.Fade(rl.RED,0.8))
     }
 }
+
 
